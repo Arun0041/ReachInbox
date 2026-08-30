@@ -15,6 +15,7 @@ import { getQueue } from './services/queue.service';
 
 export function createApp(): express.Express {
   const app = express();
+  app.set('trust proxy', 1); // Trust Render's reverse proxy for correct req.protocol (https)
   app.use(helmet());
   app.use(cors({ origin: env.FRONTEND_URL, credentials: true }));
   app.use(express.json({ limit: '2mb' }));

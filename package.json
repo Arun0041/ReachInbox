@@ -1,0 +1,21 @@
+{
+  "name": "outbox-email-scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack email scheduling application (Express + Redis + BullMQ + SQLite, React + TypeScript)",
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "install:all": "npm install",
+    "dev:server": "npm --workspace backend run dev",
+    "dev:worker": "npm --workspace backend run dev:worker",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev": "concurrently -n api,worker,web -c blue,magenta,green \"npm run dev:server\" \"npm run dev:worker\" \"npm run dev:frontend\"",
+    "build": "npm --workspace backend run build && npm --workspace frontend run build",
+    "typecheck": "npm --workspace backend run typecheck && npm --workspace frontend run typecheck",
+    "redis:start": "docker compose up -d redis",
+    "redis:stop": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

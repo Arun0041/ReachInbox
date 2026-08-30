@@ -5,7 +5,7 @@ import { AppError } from '../utils/AppError';
 
 const WINDOW_MS = 60 * 60 * 1000;
 
-export function emailRateLimit(req: Request, _res: Response, next: NextFunction): void {
+export async function emailRateLimit(req: Request, _res: Response, next: NextFunction): Promise<void> {
   if (!req.userId) {
     next(new AppError(401, 'Authentication required'));
     return;
@@ -14,20 +14,15 @@ export function emailRateLimit(req: Request, _res: Response, next: NextFunction)
   const now = Date.now();
   const windowStart = Math.floor(now / WINDOW_MS) * WINDOW_MS;
   const db = getDb();
-  db.prepare(
-    `INSERT INTO rate_limits (user_id, window_start, count) VALUES (?, ?, 0)
-     ON CONFLICT(user_id, window_start) DO UPDATE SET count = count + 1`
-  ).run(userId, windowStart);
-  const row = db
-    .prepare(`SELECT count FROM rate_limits WHERE user_id = ? AND window_start = ?`)
-    .get(userId, windowStart) as { count: number };
-  if (row.count > env.USER_EMAIL_RATE_LIMIT) {
-    next(
-      new AppError(
-        429,
-        `Rate limit exceeded: maximum ${env.USER_EMAIL_RATE_LIMIT} emails per hour`
-      )
-    );
+  const rows = await db.raw(
+    `INSERT INTO rate_limits (user_id, window_start, count) VALUES (?, ?, 1)
+     ON CONFLICT (user_id, window_start) DO UPDATE SET count = rate_limits.count + 1
+     RETURNING count`,
+    [userId, windowStart]
+  );
+  const count = (rows.rows[0]?.count ?? 1) as number;
+  if (count > env.USER_SCHEDULE_RATE_LIMIT) {
+    next(new AppError(429, `Rate limit exceeded: maximum ${env.USER_SCHEDULE_RATE_LIMIT} schedule requests per hour`));
     return;
   }
   next();

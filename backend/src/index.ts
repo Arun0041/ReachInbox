@@ -1,4 +1,5 @@
-import { openDb, closeDb } from './config/db';
+import { getDb, closeDb, assertDbAvailable } from './config/db';
+import { applySchema } from './db/schema';
 import { env } from './config/env';
 import { closeRedis, assertRedisAvailable } from './config/redis';
 import { createApp } from './app';
@@ -15,22 +16,21 @@ async function shutdown(signal: string): Promise<void> {
   if (env.WORKER_MODE !== 'server') await stopEmailWorker();
   await closeQueue();
   await closeRedis();
-  closeDb();
+  await closeDb();
   process.exit(0);
 }
 
 async function bootstrap(): Promise<void> {
-  openDb();
+  await assertDbAvailable();
+  await applySchema(getDb());
   await assertRedisAvailable();
   const app = createApp();
   const server = app.listen(env.PORT, () => {
     console.log(`[server] API listening on http://localhost:${env.PORT}`);
+    console.log(`[server] Bull Board: http://localhost:${env.PORT}/admin/queues`);
   });
 
-  if (env.WORKER_MODE !== 'server') {
-    startEmailWorker();
-  }
-
+  if (env.WORKER_MODE !== 'server') startEmailWorker();
   await recoverPendingJobs();
 
   process.on('SIGINT', () => void shutdown('SIGINT'));

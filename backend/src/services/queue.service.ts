@@ -8,16 +8,17 @@ export const EMAIL_JOB = 'send-email';
 export interface EmailJobData {
   emailId: string;
   userId: number;
+  senderId: number;
   to: string;
   subject: string;
   body: string;
 }
 
-let queue: Queue<EmailJobData> | null = null;
+let queue: Queue | null = null;
 
-export function getQueue(): Queue<EmailJobData> {
+export function getQueue(): Queue {
   if (!queue) {
-    queue = new Queue<EmailJobData>(EMAIL_QUEUE, {
+    queue = new Queue(EMAIL_QUEUE, {
       connection: createRedis(),
       defaultJobOptions: {
         attempts: 3,
@@ -25,7 +26,6 @@ export function getQueue(): Queue<EmailJobData> {
         removeOnComplete: { age: 7 * 24 * 3600, count: 1000 },
         removeOnFail: { age: 7 * 24 * 3600, count: 1000 },
       },
-      limiter: { max: env.QUEUE_RATE_LIMIT_MAX, duration: env.QUEUE_RATE_LIMIT_MS },
     });
   }
   return queue;

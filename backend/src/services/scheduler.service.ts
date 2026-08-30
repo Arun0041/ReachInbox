@@ -6,6 +6,7 @@ function toJobData(email: Email): EmailJobData {
   return {
     emailId: email.id,
     userId: email.user_id,
+    senderId: email.sender_id ?? 0,
     to: email.to_email,
     subject: email.subject,
     body: email.body,
@@ -14,10 +15,7 @@ function toJobData(email: Email): EmailJobData {
 
 export async function recoverPendingJobs(): Promise<void> {
   const db = getDb();
-  const pending = db
-    .prepare(`SELECT * FROM emails WHERE status IN ('scheduled', 'processing')`)
-    .all() as unknown as Email[];
-
+  const pending = (await db.raw(`SELECT * FROM emails WHERE status IN ('scheduled', 'processing')`)).rows as Email[];
   if (pending.length === 0) return;
 
   const queue = getQueue();

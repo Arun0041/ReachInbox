@@ -30,11 +30,17 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   return (
     <ToastContext.Provider value={{ addToast }}>
       {children}
-      <div className="toasts" aria-live="polite">
+      <div className="fixed top-4 right-4 flex flex-col gap-2 z-[200]" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.type}`} role="status">
-            <span>{t.message}</span>
-            <button className="toast__close" onClick={() => remove(t.id)} aria-label="Dismiss">
+          <div 
+            key={t.id} 
+            className={`flex items-start gap-3 p-3 bg-white border-l-4 rounded shadow-lg min-w-[280px] max-w-sm transition-all animate-in slide-in-from-right ${
+              t.type === 'success' ? 'border-green-500' : t.type === 'error' ? 'border-red-500' : 'border-blue-500'
+            }`}
+            role="status"
+          >
+            <span className="flex-1 text-sm text-gray-800">{t.message}</span>
+            <button className="text-gray-400 hover:text-gray-600 text-lg leading-none" onClick={() => remove(t.id)} aria-label="Dismiss">
               ×
             </button>
           </div>

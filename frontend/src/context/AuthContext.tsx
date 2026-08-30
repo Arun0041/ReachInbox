@@ -8,6 +8,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<User>;
   register: (name: string, email: string, password: string) => Promise<User>;
   logout: () => void;
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -18,17 +19,27 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const refresh = async (): Promise<void> => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
+      setUser(null);
       setLoading(false);
       return;
     }
-    authApi
-      .me()
-      .then(setUser)
-      .catch(() => localStorage.removeItem(TOKEN_KEY))
-      .finally(() => setLoading(false));
+    setLoading(true);
+    try {
+      setUser(await authApi.me());
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (email: string, password: string): Promise<User> => {
@@ -51,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   };
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, login, register, logout }),
+    () => ({ user, loading, login, register, logout, refresh }),
     [user, loading]
   );
 

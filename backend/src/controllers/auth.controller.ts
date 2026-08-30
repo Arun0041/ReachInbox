@@ -31,11 +31,11 @@ export async function login(req: Request, res: Response): Promise<void> {
   ok(res, { user, token });
 }
 
-export function me(req: Request, res: Response): void {
+export async function me(req: Request, res: Response): Promise<void> {
+  if (!req.userId) throw new AppError(401, 'Authentication required');
   const db = getDb();
-  const user = db
-    .prepare(`SELECT id, email, name, created_at FROM users WHERE id = ?`)
-    .get(req.userId) as User | undefined;
+  const rows = await db.raw('SELECT id, google_id, email, name, avatar_url, created_at FROM users WHERE id = ?', [req.userId]);
+  const user = (rows.rows as User[])[0];
   if (!user) throw new AppError(404, 'User not found');
   ok(res, { user });
 }

@@ -1,62 +1,41 @@
 import nodemailer from 'nodemailer';
 import { env } from './env';
+import type { Sender } from '../types';
 
-export type TransportMode = 'ethereal' | 'smtp' | 'json';
+const cache = new Map<string, Promise<nodemailer.Transporter>>();
 
-interface PreparedTransport {
-  transporter: nodemailer.Transporter;
-  mode: TransportMode;
+async function buildEthereal(): Promise<nodemailer.Transporter> {
+  const account = await nodemailer.createTestAccount();
+  console.log('[email] Using Ethereal test account:', account.user);
+  return nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
+    auth: { user: account.user, pass: account.pass },
+  });
 }
 
-let prepared: PreparedTransport | null = null;
-let preparedPromise: Promise<PreparedTransport> | null = null;
-
-async function buildTransport(): Promise<PreparedTransport> {
-  if (env.ETHEREAL === 'true') {
-    try {
-      const account = await nodemailer.createTestAccount();
-      console.log('[email] Using Ethereal test account:', account.user);
-      const transporter = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
-        secure: false,
-        auth: { user: account.user, pass: account.pass },
-      });
-      return { transporter, mode: 'ethereal' };
-    } catch (err) {
-      console.warn('[email] Ethereal unavailable, falling back:', (err as Error).message);
-    }
+export async function getTransporterForSender(sender: Sender): Promise<nodemailer.Transporter> {
+  if (sender.provider === 'smtp' && sender.smtp_host && sender.smtp_port) {
+    return nodemailer.createTransport({
+      host: sender.smtp_host,
+      port: sender.smtp_port,
+      secure: sender.smtp_port === 465,
+      auth: sender.smtp_user ? { user: sender.smtp_user, pass: sender.smtp_pass ?? '' } : undefined,
+    });
   }
-
-  if (env.SMTP_HOST && env.SMTP_PORT) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: env.SMTP_HOST,
-        port: env.SMTP_PORT,
-        secure: env.SMTP_PORT === 465,
-        auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS ?? '' } : undefined,
-      });
-      await transporter.verify();
-      console.log(`[email] Using SMTP transport ${env.SMTP_HOST}:${env.SMTP_PORT}`);
-      return { transporter, mode: 'smtp' };
-    } catch (err) {
-      console.warn('[email] SMTP unavailable, falling back:', (err as Error).message);
-    }
+  const key = 'ethereal';
+  if (!cache.has(key)) {
+    cache.set(
+      key,
+      buildEthereal().catch((err) => {
+        console.warn('[email] Ethereal unavailable, using JSON transport:', (err as Error).message);
+        cache.delete(key);
+        return nodemailer.createTransport({ jsonTransport: true });
+      })
+    );
   }
-
-  console.warn('[email] No real transport configured; using JSON transport (messages are logged)');
-  return { transporter: nodemailer.createTransport({ jsonTransport: true }), mode: 'json' };
-}
-
-export async function getTransporter(): Promise<nodemailer.Transporter> {
-  if (!preparedPromise) preparedPromise = buildTransport();
-  const result = await preparedPromise;
-  prepared = result;
-  return result.transporter;
-}
-
-export function getTransportMode(): TransportMode | null {
-  return prepared?.mode ?? null;
+  return cache.get(key) as Promise<nodemailer.Transporter>;
 }
 
 export function getFromAddress(): string {
@@ -66,9 +45,7 @@ export function getFromAddress(): string {
 export function getPreviewUrl(info: nodemailer.SentMessageInfo): string | null {
   try {
     const fn = (nodemailer as unknown as { getTestMessageUrl?: (i: unknown) => string | null }).getTestMessageUrl;
-    if (prepared?.mode === 'ethereal' && typeof fn === 'function') {
-      return fn(info) ?? null;
-    }
+    if (typeof fn === 'function') return fn(info) ?? null;
   } catch {
     // ignore
   }

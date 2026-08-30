@@ -1,19 +1,23 @@
 {
-  "name": "outbox-backend",
+  "name": "reachinbox-backend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Backend for the Outbox email scheduling app",
+  "description": "Backend for the ReachInbox email scheduler (BullMQ + Postgres + Redis)",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:server": "tsx watch src/index.ts",
     "dev:worker": "tsx watch src/workers/email.worker.ts",
     "start": "tsx src/index.ts",
     "worker": "tsx src/workers/email.worker.ts",
+    "migrate": "tsx src/db/migrate.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bull-board/api": "^6.7.0",
+    "@bull-board/express": "^6.7.0",
+    "@elastic/elasticsearch": "^8.17.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.34.0",
     "cors": "^2.8.5",
@@ -22,8 +26,10 @@
     "helmet": "^8.0.0",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
     "morgan": "^1.10.0",
     "nodemailer": "^6.9.16",
+    "pg": "^8.13.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -34,6 +40,7 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.10.2",
     "@types/nodemailer": "^6.4.17",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

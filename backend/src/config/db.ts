@@ -1,31 +1,43 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import knex, { Knex } from 'knex';
 import { env } from './env';
-import { initSchema } from '../db/schema';
 
-let db: DatabaseSync | null = null;
+let instance: Knex | null = null;
 
-export function openDb(): DatabaseSync {
-  const dir = path.dirname(path.resolve(env.DATABASE_PATH));
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  db = new DatabaseSync(env.DATABASE_PATH);
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec('PRAGMA foreign_keys = ON;');
-  initSchema(db);
-  return db;
-}
+export function getDb(): Knex {
+  if (!instance) {
+    const connection =
+      env.DATABASE_URL ??
+      ({
+        host: env.DB_HOST,
+        port: env.DB_PORT,
+        database: env.DB_NAME,
+        user: env.DB_USER,
+        password: env.DB_PASSWORD,
+      } as Knex.PgConnectionConfig);
 
-export function getDb(): DatabaseSync {
-  if (!db) {
-    openDb();
+    instance = knex({
+      client: 'pg',
+      connection,
+      pool: { min: 1, max: 10 },
+    });
   }
-  return db;
+  return instance;
 }
 
-export function closeDb(): void {
-  if (db) {
-    db.close();
-    db = null;
+export async function assertDbAvailable(): Promise<void> {
+  const db = getDb();
+  try {
+    await db.raw('SELECT 1');
+  } catch (err) {
+    throw new Error(
+      'Cannot reach PostgreSQL. Start it with "docker compose up -d postgres".(' + (err as Error).message + ')'
+    );
+  }
+}
+
+export async function closeDb(): Promise<void> {
+  if (instance) {
+    await instance.destroy();
+    instance = null;
   }
 }

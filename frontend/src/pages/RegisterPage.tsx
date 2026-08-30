@@ -2,8 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { getErrorMessage } from '../api/client';
 
 export function RegisterPage(): JSX.Element {
@@ -32,48 +30,63 @@ export function RegisterPage(): JSX.Element {
   };
 
   return (
-    <div className="auth">
-      <div className="auth__card">
-        <div className="auth__brand">
-          <span className="header__logo">✉</span>
-          <h1>ReachInbox</h1>
-          <p>Create your account to start scheduling.</p>
-        </div>
-        <form className="form" onSubmit={handleSubmit}>
-          <Input
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Jane Doe"
-            autoComplete="name"
-            required
-          />
-          <Input
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-          />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 6 characters"
-            autoComplete="new-password"
-            minLength={6}
-            required
-          />
-          {error && <p className="form__error">{error}</p>}
-          <Button type="submit" fullWidth loading={loading}>
-            Sign up
-          </Button>
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="w-full max-w-[440px] border border-gray-100 rounded-xl p-10 shadow-[0_2px_10px_rgba(0,0,0,0.04)]">
+        <h1 className="text-3xl font-bold text-center text-gray-900 mb-8 tracking-tight">Create Account</h1>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full Name"
+              autoComplete="name"
+              required
+              className="w-full bg-[#f8f9fa] border-none text-sm text-gray-900 rounded-md px-4 py-3 focus:ring-1 focus:ring-gray-200 outline-none placeholder:text-gray-400"
+            />
+          </div>
+          <div>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email ID"
+              autoComplete="email"
+              required
+              className="w-full bg-[#f8f9fa] border-none text-sm text-gray-900 rounded-md px-4 py-3 focus:ring-1 focus:ring-gray-200 outline-none placeholder:text-gray-400"
+            />
+          </div>
+          <div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              autoComplete="new-password"
+              minLength={6}
+              required
+              className="w-full bg-[#f8f9fa] border-none text-sm text-gray-900 rounded-md px-4 py-3 focus:ring-1 focus:ring-gray-200 outline-none placeholder:text-gray-400"
+            />
+          </div>
+          
+          {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+          
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#00b05b] hover:bg-[#009b50] text-white font-medium py-3 rounded-md transition-colors flex justify-center items-center mt-2"
+          >
+            {loading ? (
+              <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+            ) : (
+              'Sign up'
+            )}
+          </button>
         </form>
-        <p className="auth__switch">
-          Already have an account? <Link to="/login">Log in</Link>
+        
+        <p className="text-center mt-6 text-sm text-gray-500">
+          Already have an account? <Link to="/login" className="text-[#00b05b] font-medium hover:underline">Log in</Link>
         </p>
       </div>
     </div>

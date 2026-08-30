@@ -48,9 +48,10 @@ services:
   # 2. Managed Redis Cache
   - type: redis
     name: outbox-redis
+    ipAllowList: [] # [] ensures it is secure and only accessible internally by your backend
 
 # 3. Managed PostgreSQL Database
 databases:
   - name: outbox-postgres
     databaseName: reachinbox
-    user: postgres
+    # (Removed 'user: postgres' because Render doesn't allow 'postgres' as a username. Render will auto-generate one for you!)

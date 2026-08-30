@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import nodemailer from 'nodemailer';
 import type { Job } from 'bullmq';
 import { getDb } from '../config/db';
 import { env } from '../config/env';
@@ -131,7 +132,7 @@ export async function processEmailJob(job: Job<EmailJobData>, token: string): Pr
       } catch (err) {
         console.warn('[email] Ethereal send failed (likely port 587 block). Using mock send.', (err as Error).message);
         // Fallback for Render's strict port 587 blocking:
-        const mockTransport = require('nodemailer').createTransport({ jsonTransport: true });
+        const mockTransport = nodemailer.createTransport({ jsonTransport: true });
         const info = await mockTransport.sendMail(mailOptions);
         messageId = info.messageId ?? 'mock-id';
       }

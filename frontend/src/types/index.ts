@@ -50,6 +50,11 @@ export interface ScheduleEmailPayload {
   delayBetweenMs: number;
   hourlyLimit?: number;
   senderId?: number;
+  attachments?: {
+    filename: string;
+    content: string; // base64
+    contentType?: string;
+  }[];
 }
 
 export interface SlackStatus {

@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS emails (
 
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS batch_id TEXT;
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS hourly_limit INTEGER;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS attachments TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_emails_user_schedule ON emails(user_id, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status);

@@ -5,14 +5,7 @@ import { createRedis } from '../config/redis';
 export const EMAIL_QUEUE = 'emails';
 export const EMAIL_JOB = 'send-email';
 
-export interface EmailJobData {
-  emailId: string;
-  userId: number;
-  senderId: number;
-  to: string;
-  subject: string;
-  body: string;
-}
+export type { EmailJobData } from '../types';
 
 let queue: Queue | null = null;
 

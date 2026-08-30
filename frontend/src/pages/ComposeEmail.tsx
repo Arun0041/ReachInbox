@@ -22,6 +22,8 @@ export function ComposeEmail(): JSX.Element {
   const [body, setBody] = useState('');
   const [recipientsText, setRecipientsText] = useState('');
   
+  const [toEmails, setToEmails] = useState<string[]>([]);
+  
   // By default schedule for 1 hour from now, formatting to YYYY-MM-DDTHH:mm
   const [startAt, setStartAt] = useState(() => {
     const d = new Date(Date.now() + 60 * 60 * 1000);
@@ -33,8 +35,54 @@ export function ComposeEmail(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSendLater, setShowSendLater] = useState(false);
+  
+  const [attachments, setAttachments] = useState<{ filename: string; content: string; contentType?: string }[]>([]);
+  const attachmentRef = useRef<HTMLInputElement>(null);
 
-  const toEmails = parseEmails(recipientsText);
+  const [activeFormats, setActiveFormats] = useState<Record<string, boolean>>({});
+
+  const updateFormattingState = () => {
+    setActiveFormats({
+      bold: document.queryCommandState('bold'),
+      italic: document.queryCommandState('italic'),
+      underline: document.queryCommandState('underline'),
+      justifyLeft: document.queryCommandState('justifyLeft'),
+      justifyCenter: document.queryCommandState('justifyCenter'),
+      insertOrderedList: document.queryCommandState('insertOrderedList'),
+      insertUnorderedList: document.queryCommandState('insertUnorderedList'),
+      blockquote: document.queryCommandValue('formatBlock') === 'blockquote',
+    });
+  };
+
+  const execCmd = (cmd: string, val?: string) => {
+    document.execCommand(cmd, false, val);
+    updateFormattingState();
+  };
+
+  const btnClass = (cmd: string) => 
+    `p-1.5 rounded transition-colors ${activeFormats[cmd] ? 'bg-gray-200 text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`;
+
+  const handleAttachment = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const result = evt.target?.result as string;
+        if (!result) return;
+        const base64Content = result.split(',')[1];
+        setAttachments(prev => [...prev, {
+          filename: file.name,
+          content: base64Content,
+          contentType: file.type
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    
+    if (attachmentRef.current) attachmentRef.current.value = '';
+  };
 
   const handleFile = (e: ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0];
@@ -42,40 +90,75 @@ export function ComposeEmail(): JSX.Element {
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result ?? '');
-      setRecipientsText((prev) => (prev ? prev + ' ' + text : text));
+      const parsed = parseEmails(text);
+      if (parsed.length) {
+        setToEmails(prev => Array.from(new Set([...prev, ...parsed])));
+      }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
-  const handleSubmit = async (e?: FormEvent): Promise<void> => {
-    e?.preventDefault();
+  const processEmailInput = (text: string) => {
+    const parsed = parseEmails(text);
+    if (parsed.length) {
+      setToEmails(prev => Array.from(new Set([...prev, ...parsed])));
+      setRecipientsText('');
+    }
+  };
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (['Enter', ' ', ','].includes(e.key)) {
+      e.preventDefault();
+      processEmailInput(recipientsText);
+    } else if (e.key === 'Backspace' && !recipientsText && toEmails.length > 0) {
+      setToEmails(prev => prev.slice(0, -1));
+    }
+  };
+
+  const removeEmail = (email: string) => {
+    setToEmails(prev => prev.filter(e => e !== email));
+  };
+
+  const handleSubmit = async (immediate = false): Promise<void> => {
     setError(null);
     if (!subject.trim() || !body.trim()) {
       setError('Subject and body are required.');
       return;
     }
-    if (toEmails.length === 0) {
+    
+    let finalEmails = toEmails;
+    const pending = parseEmails(recipientsText);
+    if (pending.length) {
+      finalEmails = Array.from(new Set([...finalEmails, ...pending]));
+      setToEmails(finalEmails);
+      setRecipientsText('');
+    }
+
+    if (finalEmails.length === 0) {
       setError('Add at least one valid email.');
       return;
     }
-    const date = new Date(startAt);
-    if (Number.isNaN(date.getTime())) {
+    const actualStartAt = immediate ? new Date() : new Date(startAt);
+    if (Number.isNaN(actualStartAt.getTime())) {
       setError('Please enter a valid start time.');
       return;
     }
     setLoading(true);
     try {
-      const result = await emailsApi.create({
-        subject: subject.trim(),
+      const payload = {
+        subject,
         body,
-        toEmails,
-        startAt: date.toISOString(),
-        delayBetweenMs: Math.max(0, Math.round(Number(delaySec) * 1000)),
-        hourlyLimit: Number(hourlyLimit) > 0 ? Number(hourlyLimit) : undefined,
-      });
-      addToast(`Scheduled ${result.scheduled} email(s).`);
-      navigate('/dashboard/scheduled');
+        toEmails: finalEmails,
+        startAt: actualStartAt.toISOString(),
+        delayBetweenMs: (Number.parseInt(delaySec, 10) || 0) * 1000,
+        hourlyLimit: Number.parseInt(hourlyLimit, 10) || undefined,
+        attachments: attachments.length > 0 ? attachments : undefined
+      };
+      
+      const result = await emailsApi.create(payload);
+      addToast(immediate ? `Sent ${result.scheduled} email(s)!` : `Scheduled ${result.scheduled} email(s).`);
+      navigate(immediate ? '/dashboard/sent' : '/dashboard/scheduled');
     } catch (err) {
       setError(getErrorMessage(err));
       setLoading(false);
@@ -93,10 +176,11 @@ export function ComposeEmail(): JSX.Element {
           <h1 className="text-lg font-semibold text-gray-800">Compose New Email</h1>
         </div>
         <div className="flex items-center gap-4 relative">
-          <button className="text-gray-400 hover:text-gray-600 transition-colors">
+          <input ref={attachmentRef} type="file" multiple onChange={handleAttachment} hidden />
+          <button type="button" onClick={() => attachmentRef.current?.click()} className="text-gray-400 hover:text-gray-600 transition-colors">
             <Paperclip className="w-4 h-4" />
           </button>
-          <button className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button type="button" onClick={() => setShowSendLater(!showSendLater)} className="text-gray-400 hover:text-gray-600 transition-colors">
             <Clock className="w-4 h-4" />
           </button>
           
@@ -137,7 +221,7 @@ export function ComposeEmail(): JSX.Element {
       </div>
 
       {/* Form Content */}
-      <div className="flex-1 overflow-auto px-16 py-8 max-w-[900px]">
+      <div className="flex-1 flex flex-col overflow-auto px-8 py-8 w-full">
         {error && <div className="mb-4 text-red-500 text-sm font-medium">{error}</div>}
         
         {/* From */}
@@ -153,22 +237,25 @@ export function ComposeEmail(): JSX.Element {
         <div className="flex items-start gap-4 py-3 border-b border-gray-50">
           <div className="w-20 text-sm font-medium text-gray-800 mt-1.5">To</div>
           <div className="flex-1">
-            <div className="flex flex-wrap gap-2 mb-2">
-              {toEmails.slice(0, 3).map(email => (
-                <span key={email} className="px-2.5 py-1 bg-green-50 border border-green-200 text-green-700 rounded-full text-xs">
+            <div className="flex flex-wrap gap-2 mb-2 max-h-[140px] overflow-y-auto">
+              {toEmails.map(email => (
+                <span key={email} className="px-2.5 py-1 bg-green-50 border border-green-200 text-green-700 rounded-full text-xs flex items-center gap-1.5">
                   {email}
+                  <button type="button" onClick={() => removeEmail(email)} className="text-green-600 hover:text-green-900 hover:bg-green-100 rounded-full w-4 h-4 flex items-center justify-center transition-colors">×</button>
                 </span>
               ))}
-              {toEmails.length > 3 && (
-                <span className="px-2.5 py-1 bg-green-50 border border-green-200 text-green-700 rounded-full text-xs">
-                  +{toEmails.length - 3}
-                </span>
-              )}
             </div>
             <textarea
               value={recipientsText}
-              onChange={(e) => setRecipientsText(e.target.value)}
-              placeholder="recipient@example.com"
+              onChange={(e) => {
+                setRecipientsText(e.target.value);
+                if (e.target.value.includes(' ') || e.target.value.includes(',')) {
+                  processEmailInput(e.target.value);
+                }
+              }}
+              onKeyDown={handleEmailKeyDown}
+              onBlur={() => processEmailInput(recipientsText)}
+              placeholder={toEmails.length === 0 ? "recipient@example.com" : ""}
               className="w-full text-sm text-gray-600 outline-none placeholder:text-gray-300 resize-none min-h-[24px]"
               rows={1}
             />
@@ -198,6 +285,28 @@ export function ComposeEmail(): JSX.Element {
           />
         </div>
 
+        {/* Attachments */}
+        {attachments.length > 0 && (
+          <div className="flex items-start gap-4 py-3 border-b border-gray-50">
+            <div className="w-20 text-sm font-medium text-gray-800 mt-1">Files</div>
+            <div className="flex-1 flex flex-wrap gap-2">
+              {attachments.map((file, i) => (
+                <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-md text-sm text-gray-700">
+                  <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+                  <span className="max-w-[200px] truncate">{file.filename}</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                    className="text-gray-400 hover:text-red-500 ml-1"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Delay & Limit */}
         <div className="flex items-center gap-6 py-5">
           <div className="flex items-center gap-3">
@@ -221,38 +330,41 @@ export function ComposeEmail(): JSX.Element {
         </div>
 
         {/* Editor Area */}
-        <div className="mt-4 border border-gray-50 rounded-xl bg-[#fafafa] flex flex-col overflow-hidden min-h-[400px]">
+        <div className="flex-1 mt-4 border border-gray-50 rounded-xl bg-[#fafafa] flex flex-col overflow-hidden min-h-[300px]">
           {/* Toolbar */}
           <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-50 flex-wrap">
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><Undo2 className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><Redo2 className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('undo')} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"><Undo2 className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('redo')} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"><Redo2 className="w-4 h-4" /></button>
             <div className="w-px h-4 bg-gray-200 mx-1"></div>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded flex items-center gap-1">
+            <button type="button" className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded flex items-center gap-1 transition-colors">
               <Type className="w-4 h-4" />
               <ChevronsUpDown className="w-3 h-3" />
             </button>
             <div className="w-px h-4 bg-gray-200 mx-1"></div>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><Bold className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><Italic className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><Underline className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('bold')} className={btnClass('bold')}><Bold className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('italic')} className={btnClass('italic')}><Italic className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('underline')} className={btnClass('underline')}><Underline className="w-4 h-4" /></button>
             <div className="w-px h-4 bg-gray-200 mx-1"></div>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><AlignLeft className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><ChevronsUpDown className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('justifyLeft')} className={btnClass('justifyLeft')}><AlignLeft className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('justifyCenter')} className={btnClass('justifyCenter')}><ChevronsUpDown className="w-4 h-4" /></button>
             <div className="w-px h-4 bg-gray-200 mx-1"></div>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><ListOrdered className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><List className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><IndentDecrease className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><IndentIncrease className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><Quote className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><ImageIcon className="w-4 h-4" /></button>
-            <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded"><LinkIcon className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('insertOrderedList')} className={btnClass('insertOrderedList')}><ListOrdered className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('insertUnorderedList')} className={btnClass('insertUnorderedList')}><List className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('outdent')} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"><IndentDecrease className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('indent')} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"><IndentIncrease className="w-4 h-4" /></button>
+            <button type="button" onClick={() => execCmd('formatBlock', 'blockquote')} className={btnClass('blockquote')}><Quote className="w-4 h-4" /></button>
+            <button type="button" onClick={() => { const url = prompt('Image URL:'); if (url) execCmd('insertImage', url); }} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"><ImageIcon className="w-4 h-4" /></button>
+            <button type="button" onClick={() => { const url = prompt('Link URL:'); if (url) execCmd('createLink', url); }} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"><LinkIcon className="w-4 h-4" /></button>
           </div>
           {/* Editor Body */}
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Type Your Reply..."
-            className="flex-1 w-full bg-transparent resize-none outline-none p-4 text-sm text-gray-700 placeholder:text-gray-400"
+          <div
+            contentEditable
+            onInput={(e) => setBody(e.currentTarget.innerHTML)}
+            onKeyUp={updateFormattingState}
+            onMouseUp={updateFormattingState}
+            data-placeholder="Type Your Reply..."
+            className="flex-1 w-full bg-transparent outline-none p-4 text-sm text-gray-700 focus:ring-0 overflow-y-auto before:content-[attr(data-placeholder)] before:text-gray-400 empty:before:block [&:not(:empty)]:before:hidden"
+            style={{ minHeight: '150px' }}
           />
         </div>
       </div>

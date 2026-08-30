@@ -29,7 +29,7 @@ export function App(): JSX.Element {
                 </Route>
               </Route>
             </Route>
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard/scheduled" replace />} />
           </Routes>
         </AuthProvider>
       </ToastProvider>

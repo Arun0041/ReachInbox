@@ -14,8 +14,8 @@ export function AuthCallbackPage(): JSX.Element {
       localStorage.setItem('outbox_token', token);
       window.history.replaceState({}, document.title, '/auth/callback');
     }
-    void refresh().finally(() => navigate('/dashboard', { replace: true }));
+    void refresh().finally(() => navigate('/dashboard/scheduled', { replace: true }));
   }, [location.search, refresh, navigate]);
 
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/dashboard/scheduled" replace />;
 }

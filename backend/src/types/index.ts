@@ -44,6 +44,13 @@ export interface Email {
   sent_at: string | null;
   attempts: number;
   hourly_limit: number | null;
+  attachments: string | null;
+}
+
+export interface EmailAttachment {
+  filename: string;
+  content: string;
+  contentType?: string;
 }
 
 export interface EmailJobData {
@@ -53,6 +60,7 @@ export interface EmailJobData {
   to: string;
   subject: string;
   body: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface ScheduleBatchInput {
@@ -64,4 +72,5 @@ export interface ScheduleBatchInput {
   startAt: string;
   delayBetweenMs: number;
   hourlyLimit?: number;
+  attachments?: EmailAttachment[];
 }

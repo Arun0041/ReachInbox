@@ -22,7 +22,7 @@ export function LoginPage(): JSX.Element {
     try {
       await login(email, password);
       addToast('Welcome back!');
-      navigate('/dashboard', { replace: true });
+      navigate('/dashboard/scheduled', { replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -96,6 +96,12 @@ export function LoginPage(): JSX.Element {
             )}
           </button>
         </form>
+        <div className="mt-6 text-center text-sm text-gray-500">
+          Don't have an account?{' '}
+          <button onClick={() => navigate('/register')} className="text-[#00b05b] font-medium hover:underline">
+            Sign up
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ export function RegisterPage(): JSX.Element {
     try {
       await register(name, email, password);
       addToast('Account created. Welcome!');
-      navigate('/dashboard', { replace: true });
+      navigate('/dashboard/scheduled', { replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

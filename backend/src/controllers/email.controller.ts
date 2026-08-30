@@ -13,6 +13,11 @@ const scheduleSchema = z.object({
   delayBetweenMs: z.coerce.number().min(0).default(0),
   hourlyLimit: z.coerce.number().positive().optional(),
   senderId: z.coerce.number().int().positive().optional(),
+  attachments: z.array(z.object({
+    filename: z.string(),
+    content: z.string(),
+    contentType: z.string().optional()
+  })).optional()
 });
 
 export async function createEmails(req: Request, res: Response): Promise<void> {
@@ -27,6 +32,7 @@ export async function createEmails(req: Request, res: Response): Promise<void> {
     startAt: body.startAt,
     delayBetweenMs: body.delayBetweenMs,
     hourlyLimit: body.hourlyLimit,
+    attachments: body.attachments,
   });
   ok(res, result, 201);
 }

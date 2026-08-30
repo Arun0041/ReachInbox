@@ -11,8 +11,10 @@ export function slackConnectStart(req: Request, res: Response): void {
   if (!req.userId) throw new AppError(401, 'Authentication required');
   if (!env.SLACK_CLIENT_ID) throw new AppError(500, 'Slack OAuth is not configured');
   const state = jwt.sign({ userId: req.userId, purpose: 'slack' }, env.JWT_SECRET, { expiresIn: '10m' });
+  const redirectUri = `${req.protocol}://${req.get('host')}/api/slack/callback`;
   const url = new URL('https://slack.com/oauth/v2/authorize');
   url.searchParams.set('client_id', env.SLACK_CLIENT_ID);
+  url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('scope', 'chat:write,im:write,users:read');
   url.searchParams.set('state', state);
   ok(res, { authUrl: url.toString() });
@@ -30,7 +32,8 @@ export async function slackCallback(req: Request, res: Response): Promise<void> 
   } catch {
     throw new AppError(401, 'Invalid OAuth state');
   }
-  const tokens = await exchangeSlackCode(code);
+  const redirectUri = `${req.protocol}://${req.get('host')}/api/slack/callback`;
+  const tokens = await exchangeSlackCode(code, redirectUri);
   await saveSlackConnection(userId, tokens);
   res.redirect(`${env.FRONTEND_URL}/settings?slack=connected`);
 }

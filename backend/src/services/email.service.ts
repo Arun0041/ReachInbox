@@ -37,18 +37,19 @@ export async function scheduleEmails(input: ScheduleBatchInput): Promise<{ sched
   const delayBetween = Math.max(0, input.delayBetweenMs);
 
   let scheduled = 0;
+  const attachmentsJson = input.attachments ? JSON.stringify(input.attachments) : null;
   for (const [index, toEmail] of input.toEmails.entries()) {
     const id = randomUUID();
     const scheduledAtIso = new Date(startMs + index * delayBetween).toISOString();
     await db.raw(
-      `INSERT INTO emails (id, user_id, sender_id, to_email, subject, body, scheduled_at, status, batch_id, hourly_limit, attempts)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, 0)`,
-      [id, input.userId, sender.id, toEmail, input.subject, input.body, scheduledAtIso, batchId, input.hourlyLimit ?? null]
+      `INSERT INTO emails (id, user_id, sender_id, to_email, subject, body, scheduled_at, status, batch_id, hourly_limit, attempts, attachments)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, 0, ?)`,
+      [id, input.userId, sender.id, toEmail, input.subject, input.body, scheduledAtIso, batchId, input.hourlyLimit ?? null, attachmentsJson]
     );
     const delay = Math.max(0, new Date(scheduledAtIso).getTime() - Date.now());
     await queue.add(
       EMAIL_JOB,
-      { emailId: id, userId: input.userId, senderId: sender.id, to: toEmail, subject: input.subject, body: input.body },
+      { emailId: id, userId: input.userId, senderId: sender.id, to: toEmail, subject: input.subject, body: input.body, attachments: input.attachments },
       { jobId: id, delay }
     );
     scheduled += 1;
@@ -108,16 +109,28 @@ export async function processEmailJob(job: Job<EmailJobData>, token: string): Pr
     let previewUrl: string | null = null;
     const fromStr = sender.email || getFromAddress();
 
-    if (env.ETHEREAL === 'true') {
+    const sendWithEthereal = async () => {
       const transporter = await getTransporterForSender(sender);
-      const info = await transporter.sendMail({
+      const mailOptions: any = {
         from: fromStr,
         to: data.to,
         subject: data.subject,
-        text: data.body,
-      });
+        html: data.body,
+      };
+      if (data.attachments && data.attachments.length > 0) {
+        mailOptions.attachments = data.attachments.map(a => ({
+          filename: a.filename,
+          content: Buffer.from(a.content, 'base64'),
+          contentType: a.contentType
+        }));
+      }
+      const info = await transporter.sendMail(mailOptions);
       previewUrl = getPreviewUrl(info);
       messageId = info.messageId ?? null;
+    };
+
+    if (env.ETHEREAL === 'true') {
+      await sendWithEthereal();
     } else {
       if (!env.BREVO_API_KEY) throw new Error('BREVO_API_KEY is missing in environment variables');
       
@@ -129,6 +142,19 @@ export async function processEmailJob(job: Job<EmailJobData>, token: string): Pr
         senderEmail = fromMatch[2].trim();
       }
 
+      const brevoPayload: any = {
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: data.to }],
+        subject: data.subject,
+        htmlContent: data.body,
+      };
+      if (data.attachments && data.attachments.length > 0) {
+        brevoPayload.attachment = data.attachments.map(a => ({
+          name: a.filename,
+          content: a.content
+        }));
+      }
+
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
@@ -136,21 +162,17 @@ export async function processEmailJob(job: Job<EmailJobData>, token: string): Pr
           'api-key': env.BREVO_API_KEY,
           'content-type': 'application/json'
         },
-        body: JSON.stringify({
-          sender: { name: senderName, email: senderEmail },
-          to: [{ email: data.to }],
-          subject: data.subject,
-          textContent: data.body,
-        })
+        body: JSON.stringify(brevoPayload)
       });
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Brevo API Error: ${res.status} - ${errText}`);
+        console.warn(`[worker] Brevo API Error: ${res.status} - ${errText}. Falling back to Ethereal...`);
+        await sendWithEthereal();
+      } else {
+        const json = (await res.json()) as { messageId: string };
+        messageId = json.messageId;
       }
-      
-      const json = (await res.json()) as { messageId: string };
-      messageId = json.messageId;
     }
 
     const sentAt = new Date().toISOString();

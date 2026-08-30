@@ -9,18 +9,20 @@ export interface SlackTokens {
   channel_id?: string;
 }
 
-export async function exchangeSlackCode(code: string): Promise<SlackTokens> {
+export async function exchangeSlackCode(code: string, redirectUri: string): Promise<SlackTokens> {
   if (!env.SLACK_CLIENT_ID || !env.SLACK_CLIENT_SECRET) {
     throw new Error('Slack OAuth is not configured');
   }
+  const body = new URLSearchParams();
+  body.append('client_id', env.SLACK_CLIENT_ID);
+  body.append('client_secret', env.SLACK_CLIENT_SECRET);
+  body.append('code', code);
+  body.append('redirect_uri', redirectUri);
+  
   const res = await fetch('https://slack.com/api/oauth.v2.access', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: env.SLACK_CLIENT_ID,
-      client_secret: env.SLACK_CLIENT_SECRET,
-      code,
-    }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
   });
   const data = (await res.json()) as {
     ok: boolean;

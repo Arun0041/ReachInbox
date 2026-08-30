@@ -11,6 +11,8 @@ async function buildEthereal(): Promise<nodemailer.Transporter> {
     host: 'smtp.ethereal.email',
     port: 587,
     secure: false,
+    connectionTimeout: 5000,
+    socketTimeout: 5000,
     auth: { user: account.user, pass: account.pass },
   });
 }
